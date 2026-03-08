@@ -56,14 +56,14 @@ public class DoomValueAdjustmentPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
-		Widget lootValueWidget = client.getWidget(InterfaceID.DOM_END_LEVEL_UI, InterfaceID.DomEndLevelUi.LOOT_VALUE);
+		Widget lootValueWidget = client.getWidget(InterfaceID.DomEndLevelUi.LOOT_VALUE);
 		if (lootValueWidget == null || lootValueWidget.isHidden())
 		{
 			originalTotalValue = -1;
 			return;
 		}
 
-		Widget lootContents = client.getWidget(InterfaceID.DOM_END_LEVEL_UI, InterfaceID.DomEndLevelUi.LOOT_CONTENTS);
+		Widget lootContents = client.getWidget(InterfaceID.DomEndLevelUi.LOOT_CONTENTS);
 		if (lootContents == null)
 		{
 			return;
