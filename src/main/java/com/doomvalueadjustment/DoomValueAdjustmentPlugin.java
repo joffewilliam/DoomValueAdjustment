@@ -1,5 +1,6 @@
 package com.doomvalueadjustment;
 
+import com.google.inject.Provides;
 import java.text.DecimalFormat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -10,7 +11,9 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
@@ -23,6 +26,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 public class DoomValueAdjustmentPlugin extends Plugin
 {
 	private static final int BOGUS_BONE_PRICE = 8_000;
+	private static final double APPROXIMATE_DRAGON_FRACTION = 0.77;
 
 	private static final Pattern VALUE_PATTERN = Pattern.compile("([\\d,]+)");
 	private static final DecimalFormat VALUE_FORMAT = new DecimalFormat("#,##0");
@@ -30,7 +34,19 @@ public class DoomValueAdjustmentPlugin extends Plugin
 	@Inject
 	private Client client;
 
+	@Inject
+	private ItemManager itemManager;
+
+	@Inject
+	private DoomValueAdjustmentConfig config;
+
 	private long originalTotalValue = -1;
+
+	@Provides
+	DoomValueAdjustmentConfig provideConfig(ConfigManager configManager)
+	{
+		return configManager.getConfig(DoomValueAdjustmentConfig.class);
+	}
 
 	@Override
 	protected void startUp()
@@ -109,7 +125,19 @@ public class DoomValueAdjustmentPlugin extends Plugin
 			return;
 		}
 
-		long bonesDeduction = (long) totalBonesQty * BOGUS_BONE_PRICE;
+		int valuePerBone;
+		if (config.bonesValuation() == DoomValueAdjustmentConfig.BonesValuation.APPROXIMATE)
+		{
+			int dragonBonesPrice = itemManager.getItemPrice(ItemID.DRAGON_BONES);
+			valuePerBone = (int) (dragonBonesPrice * APPROXIMATE_DRAGON_FRACTION);
+		}
+		else
+		{
+			valuePerBone = 0;
+		}
+
+		// Replace bogus 8k each with chosen value: subtract (8000 - valuePerBone) per bone
+		long bonesDeduction = (long) totalBonesQty * (BOGUS_BONE_PRICE - valuePerBone);
 		long correctedValue = Math.max(0L, originalTotalValue - bonesDeduction);
 		String correctedText = "Value: " + VALUE_FORMAT.format(correctedValue) + " GP";
 
