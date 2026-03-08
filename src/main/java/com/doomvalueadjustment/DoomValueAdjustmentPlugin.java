@@ -1,15 +1,15 @@
 package com.doomvalueadjustment;
 
-import com.google.inject.Provides;
 import java.text.DecimalFormat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
 import net.runelite.api.Client;
+import net.runelite.api.ItemID;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -22,11 +22,6 @@ import net.runelite.client.plugins.PluginDescriptor;
 )
 public class DoomValueAdjustmentPlugin extends Plugin
 {
-	private static final int DOOM_GROUP_ID = 919;
-	private static final int LOOT_CONTENTS_CHILD_ID = 19;
-	private static final int LOOT_VALUE_CHILD_ID = 20;
-
-	private static final int SUN_KISSED_BONES_ITEM_ID = 29378;
 	private static final int BOGUS_BONE_PRICE = 8_000;
 
 	private static final Pattern VALUE_PATTERN = Pattern.compile("([\\d,]+)");
@@ -35,16 +30,7 @@ public class DoomValueAdjustmentPlugin extends Plugin
 	@Inject
 	private Client client;
 
-	@Inject
-	private DoomValueAdjustmentConfig config;
-
 	private long originalTotalValue = -1;
-
-	@Provides
-	DoomValueAdjustmentConfig provideConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(DoomValueAdjustmentConfig.class);
-	}
 
 	@Override
 	protected void startUp()
@@ -61,7 +47,7 @@ public class DoomValueAdjustmentPlugin extends Plugin
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded event)
 	{
-		if (event.getGroupId() == DOOM_GROUP_ID)
+		if (event.getGroupId() == InterfaceID.DOM_END_LEVEL_UI)
 		{
 			originalTotalValue = -1;
 		}
@@ -70,14 +56,14 @@ public class DoomValueAdjustmentPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick tick)
 	{
-		Widget lootValueWidget = client.getWidget(DOOM_GROUP_ID, LOOT_VALUE_CHILD_ID);
+		Widget lootValueWidget = client.getWidget(InterfaceID.DOM_END_LEVEL_UI, InterfaceID.DomEndLevelUi.LOOT_VALUE);
 		if (lootValueWidget == null || lootValueWidget.isHidden())
 		{
 			originalTotalValue = -1;
 			return;
 		}
 
-		Widget lootContents = client.getWidget(DOOM_GROUP_ID, LOOT_CONTENTS_CHILD_ID);
+		Widget lootContents = client.getWidget(InterfaceID.DOM_END_LEVEL_UI, InterfaceID.DomEndLevelUi.LOOT_CONTENTS);
 		if (lootContents == null)
 		{
 			return;
@@ -92,7 +78,7 @@ public class DoomValueAdjustmentPlugin extends Plugin
 		int totalBonesQty = 0;
 		for (Widget child : children)
 		{
-			if (child != null && child.getItemId() == SUN_KISSED_BONES_ITEM_ID)
+			if (child != null && child.getItemId() == ItemID.SUNKISSED_BONES)
 			{
 				int qty = child.getItemQuantity();
 				if (qty > 0)
@@ -113,7 +99,6 @@ public class DoomValueAdjustmentPlugin extends Plugin
 			return;
 		}
 
-		// Capture Jagex's original total once per loot window
 		if (originalTotalValue < 0)
 		{
 			originalTotalValue = parseGpFromText(currentText);
