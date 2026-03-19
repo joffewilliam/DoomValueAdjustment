@@ -19,14 +19,14 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @PluginDescriptor(
 	name = "Doom Loot Value Fix",
-	description = "Subtracts the bogus Sun-kissed bones value from the Doom end-level loot total",
-	tags = {"doom", "loot", "value", "bones"},
+	description = "Adjusts select Doom loot values (Sun-kissed bones, spirit seeds) in the end-level loot total",
+	tags = {"doom", "loot", "value", "bones", "seeds"},
 	enabledByDefault = true
 )
 public class DoomValueAdjustmentPlugin extends Plugin
 {
-	private static final int BOGUS_BONE_PRICE = 8_000;
-	private static final double APPROXIMATE_DRAGON_FRACTION = 0.77;
+	private static final double INFERRED_DRAGON_FRACTION = 0.77;
+	private static final int SPIRIT_SEED_PACK_AVERAGE_VALUE = 80_000;
 
 	private static final Pattern VALUE_PATTERN = Pattern.compile("([\\d,]+)");
 	private static final DecimalFormat VALUE_FORMAT = new DecimalFormat("#,##0");
@@ -92,19 +92,31 @@ public class DoomValueAdjustmentPlugin extends Plugin
 		}
 
 		int totalBonesQty = 0;
+		int totalSpiritSeedQty = 0;
 		for (Widget child : children)
 		{
-			if (child != null && child.getItemId() == ItemID.SUNKISSED_BONES)
+			if (child == null)
 			{
-				int qty = child.getItemQuantity();
-				if (qty > 0)
-				{
-					totalBonesQty += qty;
-				}
+				continue;
+			}
+
+			int qty = child.getItemQuantity();
+			if (qty <= 0)
+			{
+				continue;
+			}
+
+			if (child.getItemId() == ItemID.SUNKISSED_BONES)
+			{
+				totalBonesQty += qty;
+			}
+			else if (child.getItemId() == ItemID.SPIRIT_SEED)
+			{
+				totalSpiritSeedQty += qty;
 			}
 		}
 
-		if (totalBonesQty <= 0)
+		if (totalBonesQty <= 0 && totalSpiritSeedQty <= 0)
 		{
 			return;
 		}
@@ -125,20 +137,47 @@ public class DoomValueAdjustmentPlugin extends Plugin
 			return;
 		}
 
-		int valuePerBone;
-		if (config.bonesValuation() == DoomValueAdjustmentConfig.BonesValuation.APPROXIMATE)
+		long adjustment = 0;
+
+		// Sun-kissed bones: either leave as-is or infer value from dragon bones GE price
+		if (totalBonesQty > 0 && config.bonesValuation() == DoomValueAdjustmentConfig.BonesValuation.INFERRED)
 		{
+			int currentBonesPrice = itemManager.getItemPrice(ItemID.SUNKISSED_BONES);
 			int dragonBonesPrice = itemManager.getItemPrice(ItemID.DRAGON_BONES);
-			valuePerBone = (int) (dragonBonesPrice * APPROXIMATE_DRAGON_FRACTION);
-		}
-		else
-		{
-			valuePerBone = 0;
+			int inferredBonesPrice = (int) (dragonBonesPrice * INFERRED_DRAGON_FRACTION);
+
+			// Replace current price with inferred price
+			adjustment += (long) totalBonesQty * (currentBonesPrice - inferredBonesPrice);
 		}
 
-		// Replace bogus 8k each with chosen value: subtract (8000 - valuePerBone) per bone
-		long bonesDeduction = (long) totalBonesQty * (BOGUS_BONE_PRICE - valuePerBone);
-		long correctedValue = Math.max(0L, originalTotalValue - bonesDeduction);
+		// Spirit seeds: optionally treat as 0 GP
+		if (totalSpiritSeedQty > 0)
+		{
+			int currentSpiritSeedPrice = itemManager.getItemPrice(ItemID.SPIRIT_SEED);
+
+			int desiredSpiritSeedPrice;
+			switch (config.spiritSeedValuation())
+			{
+				case ZERO_GP:
+					desiredSpiritSeedPrice = 0;
+					break;
+				case SEED_PACK_AVERAGE:
+					desiredSpiritSeedPrice = SPIRIT_SEED_PACK_AVERAGE_VALUE;
+					break;
+				default:
+					desiredSpiritSeedPrice = currentSpiritSeedPrice;
+					break;
+			}
+
+			adjustment += (long) totalSpiritSeedQty * (currentSpiritSeedPrice - desiredSpiritSeedPrice);
+		}
+
+		if (adjustment == 0)
+		{
+			return;
+		}
+
+		long correctedValue = Math.max(0L, originalTotalValue - adjustment);
 		String correctedText = "Value: " + VALUE_FORMAT.format(correctedValue) + " GP";
 
 		if (!correctedText.equals(currentText))
